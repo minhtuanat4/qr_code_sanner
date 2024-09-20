@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'lifecycle_event_handler.dart';
 import 'qr_scanner_overlay_shape.dart';
 import 'types/barcode.dart';
 import 'types/barcode_format.dart';
@@ -63,31 +62,18 @@ class _QRViewState extends State<QRView> {
   @override
   void initState() {
     super.initState();
-    // _observer = LifecycleEventHandler(resumeCallBack: updateDimensions);
-    // WidgetsBinding.instance.addObserver(_observer);
     updateDimensions();
   }
+
   @override
   Widget build(BuildContext context) {
-    return NotificationListener(
-      onNotification: onNotification,
-      child: SizeChangedLayoutNotifier(
-        child: (widget.overlay != null)
-            ? _getPlatformQrViewWithOverlay()
-            : _getPlatformQrView(),
-      ),
-    );
+    return (widget.overlay != null)
+        ? _getPlatformQrViewWithOverlay()
+        : _getPlatformQrView();
   }
 
   Future<void> updateDimensions() async {
-    await QRViewController.updateDimensions(
-        widget.key as GlobalKey<State<StatefulWidget>>, _channel,
-        overlay: widget.overlay);
-  }
-
-  bool onNotification(notification) {
-    updateDimensions();
-    return false;
+    await QRViewController.updateDimensions(_channel, overlay: widget.overlay);
   }
 
   Widget _getPlatformQrViewWithOverlay() {
@@ -147,12 +133,8 @@ class _QRViewState extends State<QRView> {
 
     // Start scan after creation of the view
     final controller = QRViewController._(
-        _channel,
-        widget.key as GlobalKey<State<StatefulWidget>>?,
-        widget.onPermissionSet,
-        widget.cameraFacing)
-      .._startScan(widget.key as GlobalKey<State<StatefulWidget>>,
-          widget.overlay, widget.formatsAllowed);
+        _channel, widget.onPermissionSet, widget.cameraFacing)
+      .._startScan(widget.overlay, widget.formatsAllowed);
 
     // Initialize the controller for controlling the QRView
     widget.onQRViewCreated(controller);
@@ -174,7 +156,7 @@ class _QrCameraSettings {
 }
 
 class QRViewController {
-  QRViewController._(MethodChannel channel, GlobalKey? qrKey,
+  QRViewController._(MethodChannel channel,
       PermissionSetCallback? onPermissionSet, CameraFacing cameraFacing)
       : _channel = channel,
         _cameraFacing = cameraFacing {
@@ -219,11 +201,11 @@ class QRViewController {
   bool get hasPermissions => _hasPermissions;
 
   /// Starts the barcode scanner
-  Future<void> _startScan(GlobalKey key, QrScannerOverlayShape? overlay,
+  Future<void> _startScan(QrScannerOverlayShape? overlay,
       List<BarcodeFormat>? barcodeFormats) async {
     // We need to update the dimension before the scan is started.
     try {
-      await QRViewController.updateDimensions(key, _channel, overlay: overlay);
+      await QRViewController.updateDimensions(_channel, overlay: overlay);
       return await _channel.invokeMethod(
           'startScan', barcodeFormats?.map((e) => e.asInt()).toList() ?? []);
     } on PlatformException catch (e) {
@@ -319,14 +301,12 @@ class QRViewController {
   }
 
   /// Updates the view dimensions for iOS.
-  static Future<bool> updateDimensions(GlobalKey key, MethodChannel channel,
+  static Future<bool> updateDimensions(MethodChannel channel,
       {QrScannerOverlayShape? overlay}) async {
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       // Add small delay to ensure the render box is loaded
       try {
         await channel.invokeMethod('setDimensions', {
-          'width': 100,
-          'height': 100,
           'scanAreaWidth': overlay?.cutOutWidth ?? 0,
           'scanAreaHeight': overlay?.cutOutHeight ?? 0,
           'scanAreaOffset': overlay?.cutOutBottomOffset ?? 0

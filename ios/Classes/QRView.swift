@@ -39,7 +39,7 @@ public class QRView:NSObject,FlutterPlatformView {
     public init(withFrame frame: CGRect, withRegistrar registrar: FlutterPluginRegistrar, withId id: Int64, params: Dictionary<String, Any>){
         self.registrar = registrar
         previewView = UIView(frame: CGRect(x: 0, y: 0, width: screenSize.width, height: screenSize.height))
-        previewView.backgroundColor = UIColor.white.withAlphaComponent(0.5)
+        previewView.backgroundColor = UIColor.init(red: 255, green: 255, blue: 255, alpha: 10)
         cameraFacing = MTBCamera.init(rawValue: UInt(Int(params["cameraFacing"] as! Double))) ?? MTBCamera.back
         channel = FlutterMethodChannel(name: "net.touchcapture.qr.flutterqr/qrview_\(id)", binaryMessenger: registrar.messenger())
     }
@@ -55,8 +55,6 @@ public class QRView:NSObject,FlutterPlatformView {
                 case "setDimensions":
                     let arguments = call.arguments as! Dictionary<String, Double>
                     self?.setDimensions(result,
-                                        width: arguments["width"] ?? 0,
-                                        height: arguments["height"] ?? 0,
                                         scanAreaWidth: arguments["scanAreaWidth"] ?? 0,
                                         scanAreaHeight: arguments["scanAreaHeight"] ?? 0,
                                         scanAreaOffset: arguments["scanAreaOffset"] ?? 0)
@@ -86,7 +84,7 @@ public class QRView:NSObject,FlutterPlatformView {
         return previewView
     }
     
-    func setDimensions(_ result: @escaping FlutterResult, width: Double, height: Double, scanAreaWidth: Double, scanAreaHeight: Double, scanAreaOffset: Double) {
+    func setDimensions(_ result: @escaping FlutterResult, scanAreaWidth: Double, scanAreaHeight: Double, scanAreaOffset: Double) {
         // Then set the size of the preview area.
   
         
@@ -117,7 +115,7 @@ public class QRView:NSObject,FlutterPlatformView {
                 }
             }
         }
-        return result(width)
+        return result(0)
         
     }
     
