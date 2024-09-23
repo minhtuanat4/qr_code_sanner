@@ -4,12 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'lifecycle_event_handler.dart';
 import 'qr_scanner_overlay_shape.dart';
 import 'types/barcode.dart';
 import 'types/barcode_format.dart';
 import 'types/camera.dart';
 import 'types/camera_exception.dart';
-import 'types/features.dart';
 import 'web/flutter_qr_stub.dart'
 // ignore: uri_does_not_exist
     if (dart.library.html) 'web/flutter_qr_web.dart';
@@ -59,10 +59,14 @@ class QRView extends StatefulWidget {
 class _QRViewState extends State<QRView> {
   late MethodChannel _channel;
 
+  final controllerNotifier = ValueNotifier<QRViewController?>(null);
+
+  late LifecycleEventHandler _observer;
   @override
   void initState() {
     super.initState();
-    updateDimensions();
+    _observer = LifecycleEventHandler(resumeCallBack: updateDimensions);
+    WidgetsBinding.instance.addObserver(_observer);
   }
 
   @override
@@ -93,9 +97,8 @@ class _QRViewState extends State<QRView> {
   }
 
   Widget _getPlatformQrView() {
-    Widget _platformQrView;
     if (kIsWeb) {
-      _platformQrView = createWebQrView(
+      return createWebQrView(
         onPlatformViewCreated: widget.onQRViewCreated,
         onPermissionSet: widget.onPermissionSet,
         cameraFacing: widget.cameraFacing,
@@ -103,41 +106,54 @@ class _QRViewState extends State<QRView> {
     } else {
       switch (defaultTargetPlatform) {
         case TargetPlatform.android:
-          _platformQrView = AndroidView(
-            viewType: 'net.touchcapture.qr.flutterqr/qrview',
-            onPlatformViewCreated: _onPlatformViewCreated,
-            creationParams:
-                _QrCameraSettings(cameraFacing: widget.cameraFacing).toMap(),
-            creationParamsCodec: const StandardMessageCodec(),
+          return Stack(
+            children: [
+              AndroidView(
+                viewType: 'net.touchcapture.qr.flutterqr/qrview',
+                onPlatformViewCreated: _onPlatformViewCreated,
+                creationParams:
+                    _QrCameraSettings(cameraFacing: widget.cameraFacing)
+                        .toMap(),
+                creationParamsCodec: const StandardMessageCodec(),
+              ),
+              ValueListenableBuilder(
+                valueListenable: controllerNotifier,
+                builder: (context, controller, _) {
+                  return controller == null
+                      ? Container(
+                          color: Colors.black,
+                        )
+                      : const SizedBox();
+                },
+              )
+            ],
           );
-          break;
+
         case TargetPlatform.iOS:
-          _platformQrView = UiKitView(
+          return UiKitView(
             viewType: 'net.touchcapture.qr.flutterqr/qrview',
             onPlatformViewCreated: _onPlatformViewCreated,
             creationParams:
                 _QrCameraSettings(cameraFacing: widget.cameraFacing).toMap(),
             creationParamsCodec: const StandardMessageCodec(),
           );
-          break;
         default:
           throw UnsupportedError(
               "Trying to use the default qrview implementation for $defaultTargetPlatform but there isn't a default one");
       }
     }
-    return _platformQrView;
   }
 
   void _onPlatformViewCreated(int id) {
     _channel = MethodChannel('net.touchcapture.qr.flutterqr/qrview_$id');
 
     // Start scan after creation of the view
-    final controller = QRViewController._(
+    controllerNotifier.value = QRViewController._(
         _channel, widget.onPermissionSet, widget.cameraFacing)
       .._startScan(widget.overlay, widget.formatsAllowed);
 
     // Initialize the controller for controlling the QRView
-    widget.onQRViewCreated(controller);
+    widget.onQRViewCreated(controllerNotifier.value!);
   }
 }
 
@@ -275,20 +291,6 @@ class QRViewController {
   Future<void> resumeCamera() async {
     try {
       await _channel.invokeMethod('resumeCamera');
-    } on PlatformException catch (e) {
-      throw CameraException(e.code, e.message);
-    }
-  }
-
-  /// Returns which features are available on device.
-  Future<SystemFeatures> getSystemFeatures() async {
-    try {
-      var features =
-          await _channel.invokeMapMethod<String, dynamic>('getSystemFeatures');
-      if (features != null) {
-        return SystemFeatures.fromJson(features);
-      }
-      throw CameraException('Error', 'Could not get system features');
     } on PlatformException catch (e) {
       throw CameraException(e.code, e.message);
     }
